@@ -15,6 +15,7 @@ YELLOW = (255, 255, 0)
 RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 ORANGE = (255, 69, 0)
+WHITE = (255, 255, 255)
 
 PLAYER_1_KEY_UP = pygame.K_w
 PLAYER_1_KEY_DOWN = pygame.K_s
@@ -32,24 +33,28 @@ COLOR_PLAYER_1_BULLET = BLUE
 COLOR_PLAYER_2_BULLET = RED
 COLOR_OBSTACLE = GREEN
 
+TITLE_TEXT_SIZE = 75
+SUBTITLE_TEXT_SIZE = 40
+TITLE_SUBTITLE_MARGIN = 10
+
 PLAYER_WIDTH = 20
 PLAYER_HEIGHT = 60
-PLAYER_SPEED = 10
+PLAYER_SPEED = 30
 PLAYER_1_BULLET_VECTOR_X = 1
 PLAYER_2_BULLET_VECTOR_X = -1
 PLAYER_MAX_BULLETS = 1
 
 BULLET_WIDTH = 10
-BULLET_HEIGHT = 10
+BULLET_HEIGHT = 5
 BULLET_DELAY = 500
-BULLET_SPEED = 20
+BULLET_SPEED = 25
 
 OBSTACLE_HEIGHT = 20
 OBSTACLE_WIDTH = 20
-OBSTACLE_TYPE_1_ROWS = 8
+OBSTACLE_TYPE_1_ROWS = 6
 OBSTACLE_TYPE_1_COLUMNS = 4
-OBSTACLE_TYPE_2_ROWS = 5
-OBSTACLE_TYPE_2_COLUMNS = 5
+OBSTACLE_TYPE_2_ROWS = 4
+OBSTACLE_TYPE_2_COLUMNS = 4
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -119,7 +124,7 @@ LEVELS = [
             "columns": OBSTACLE_TYPE_2_COLUMNS
         },
         {
-            "top": OBSTACLE_BOUNDS_MAX_Y - 0.5 * OBSTACLE_TYPE_2_ROWS * OBSTACLE_HEIGHT,
+            "top": OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_TYPE_2_ROWS * OBSTACLE_HEIGHT,
             "left": OBSTACLE_BOUNDS_MIN_X + 0.5 * (OBSTACLE_BOUNDS_MAX_X - OBSTACLE_BOUNDS_MIN_X) - 0.5 * OBSTACLE_TYPE_2_COLUMNS * OBSTACLE_WIDTH,
             "rows": OBSTACLE_TYPE_2_ROWS,
             "columns": OBSTACLE_TYPE_2_COLUMNS
@@ -206,13 +211,34 @@ class Obstacle(pygame.sprite.Sprite):
         self.rect.left = left
 
 
+class Text:
+    def __init__(self, font, size, message, color, rect):
+        self.font = pygame.font.Font(font, size)
+        self.color = color
+        self.set_message(message)
+        self.rect = self.surface.get_rect()
+        self.rect.centerx = rect.centerx
+        self.rect.centery = rect.centery
+
+    def draw(self, surface):
+        surface.blit(self.surface, self.rect)
+
+    def set_message(self, message):
+        self.surface = self.font.render(message, True, self.color)
+
+
 class Game:
     def __init__(self):
         pygame.init()
         self.display_screen, self.display_rect = self.make_screen()
         self.laser_sound = pygame.mixer.Sound('assets/laser.ogg')
-        self.player_sprite = pygame.image.load("assets/ship.png")
-        self.player_sprite.convert()
+        self.block_kill_sound = pygame.mixer.Sound('assets/block_kill.wav')
+        self.player_hit_sounds = [
+            pygame.mixer.Sound('assets/player_hit_0_hp.wav'),
+            pygame.mixer.Sound('assets/player_hit_1_hp.wav'),
+            pygame.mixer.Sound('assets/player_hit_2_hp.wav')
+        ]
+        self.intro_sound = pygame.mixer.Sound('assets/intro.wav')
         self.game_over = False
         self.game_to_start = True
         self.game_started = False
@@ -267,21 +293,21 @@ class Game:
                 self.quit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == PLAYER_1_KEY_SHOOT and len(self.player_1_bullets) < PLAYER_MAX_BULLETS:
+                    # Pew pew
+                    self.laser_sound.play()
+
                     bullet = Bullet(self.player_1.rect, COLOR_PLAYER_1_BULLET, PLAYER_1_BULLET_VECTOR_X, BULLET_SPEED)
                     self.player_1_bullets.add(bullet)
                     self.all_bullets.add(bullet)
                     self.all_sprites.add(bullet)
-
+                elif event.key == PLAYER_2_KEY_SHOOT and len(self.player_2_bullets) < PLAYER_MAX_BULLETS:
                     # Pew pew
                     self.laser_sound.play()
-                elif event.key == PLAYER_2_KEY_SHOOT and len(self.player_2_bullets) < PLAYER_MAX_BULLETS:
+
                     bullet = Bullet(self.player_2.rect, COLOR_PLAYER_2_BULLET, PLAYER_2_BULLET_VECTOR_X, BULLET_SPEED)
                     self.player_2_bullets.add(bullet)
                     self.all_bullets.add(bullet)
                     self.all_sprites.add(bullet)
-
-                    # Pew pew
-                    self.laser_sound.play()
 
     def check_game_over_input(self):
         for event in pygame.event.get():
@@ -300,18 +326,26 @@ class Game:
                 self.game_to_start = False
                 self.game_started = True
                 self.game_over = False
+                self.intro_sound.play()
 
     def check_collisions(self):
-        pygame.sprite.groupcollide(self.all_bullets, self.all_obstacles, True, True)
+        hits = pygame.sprite.groupcollide(self.all_bullets, self.all_obstacles, True, False)
+        if hits:
+            self.block_kill_sound.play()
+            for obstacles in hits.values():
+                obstacles[0].kill()
+
 
         for bullet in self.player_1_bullets:
             if pygame.sprite.collide_rect(bullet, self.player_2):
                 self.player_2.compute_hit()
+                self.player_hit_sounds[self.player_2.hit_points].play()
                 bullet.kill()
 
         for bullet in self.player_2_bullets:
             if pygame.sprite.collide_rect(bullet, self.player_1):
                 self.player_1.compute_hit()
+                self.player_hit_sounds[self.player_1.hit_points].play()
                 bullet.kill()
 
     def check_game_over(self):
@@ -320,21 +354,53 @@ class Game:
             self.game_to_start = False
             self.game_started = False
 
-            # TODO : Handle game over state in arcade
-            # TODO : Display game over state more evidently
-            if self.player_1.hit_points == self.player_2.hit_points:
-                print("Game over : both players lose")
-            elif self.player_1.hit_points > 0:
-                print("Game over : player 1 wins")
-            else:
-                print("Game over : player 2 wins")
+            self.handle_game_over()
+
+    def handle_game_over(self):
+        subtitle = ""
+        if self.player_1.hit_points == self.player_2.hit_points:
+            subtitle = "Both players lose"
+        elif self.player_1.hit_points > 0:
+            subtitle = "{} wins".format(self.player_1.name)
+        else:
+            subtitle = "{} wins".format(self.player_2.name)
+
+        self.game_over_subtitle = Text(
+            'assets/arcadeclassic.ttf',
+            SUBTITLE_TEXT_SIZE,
+            subtitle,
+            WHITE,
+            self.display_rect
+        )
+        self.game_over_subtitle.rect.top = self.game_over_title.rect.bottom + TITLE_SUBTITLE_MARGIN
 
     def quit(self):
         pygame.quit()
         sys.exit()
 
     def setup_game(self):
-        self.game_to_start = False
+        self.intro_title = Text(
+            'assets/arcadeclassic.ttf',
+            TITLE_TEXT_SIZE,
+            'Space Skirmishers',
+            WHITE,
+            self.display_rect
+        )
+        self.intro_subtitle = Text(
+            'assets/arcadeclassic.ttf',
+            SUBTITLE_TEXT_SIZE,
+            'Press any key to start game',
+            WHITE,
+            self.display_rect
+        )
+        self.intro_subtitle.rect.top = self.intro_title.rect.bottom + TITLE_SUBTITLE_MARGIN
+        self.game_over_title = Text(
+            'assets/arcadeclassic.ttf',
+            TITLE_TEXT_SIZE,
+            'Game over',
+            WHITE,
+            self.display_rect
+        )
 
         # Setting up sprites
         self.player_1, self.player_2 = self.make_players()
@@ -346,11 +412,13 @@ class Game:
         self.all_sprites = pygame.sprite.Group(self.player_1, self.player_2, self.all_obstacles, self.all_bullets)
 
         # Setting up timing and inputs
-        self.fps = 60
+        self.fps = 30
         self.keys = pygame.key.get_pressed()
         self.clock = pygame.time.Clock()
 
-        self.game_started = True
+        self.game_to_start = True
+        self.game_started = False
+        self.game_over = False
 
     def main_loop(self):
         while True:
@@ -359,11 +427,19 @@ class Game:
                 self.game_over = False
 
                 self.display_screen.fill(COLOR_BACKGROUND)
+
+                self.intro_title.draw(self.display_screen)
+                self.intro_subtitle.draw(self.display_screen)
+
                 self.check_game_to_start_input()
                 pygame.display.update()
 
             elif self.game_over:
                 self.display_screen.fill(COLOR_BACKGROUND)
+
+                self.game_over_title.draw(self.display_screen)
+                self.game_over_subtitle.draw(self.display_screen)
+
                 self.check_game_over_input()
                 pygame.display.update()
 
