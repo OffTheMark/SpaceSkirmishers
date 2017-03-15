@@ -1,5 +1,6 @@
 import pygame
 import sys
+from random import randint
 
 
 GAME_TITLE = "Space Skirmishers"
@@ -33,7 +34,7 @@ COLOR_OBSTACLE = GREEN
 
 PLAYER_WIDTH = 20
 PLAYER_HEIGHT = 60
-PLAYER_SPEED = 5
+PLAYER_SPEED = 10
 PLAYER_1_BULLET_VECTOR_X = 1
 PLAYER_2_BULLET_VECTOR_X = -1
 PLAYER_MAX_BULLETS = 1
@@ -41,25 +42,90 @@ PLAYER_MAX_BULLETS = 1
 BULLET_WIDTH = 10
 BULLET_HEIGHT = 10
 BULLET_DELAY = 500
-BULLET_SPEED = 25
+BULLET_SPEED = 20
 
 OBSTACLE_HEIGHT = 20
 OBSTACLE_WIDTH = 20
+OBSTACLE_TYPE_1_ROWS = 8
+OBSTACLE_TYPE_1_COLUMNS = 4
+OBSTACLE_TYPE_2_ROWS = 5
+OBSTACLE_TYPE_2_COLUMNS = 5
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-SCREEN_MARGIN = 10
+SCREEN_MARGIN = 15
 BOUNDS_MIN_X = SCREEN_MARGIN
 BOUNDS_MAX_X = SCREEN_WIDTH - SCREEN_MARGIN
 BOUNDS_MIN_Y = SCREEN_MARGIN
 BOUNDS_MAX_Y = SCREEN_HEIGHT - SCREEN_MARGIN
 BULLET_MARGIN = (PLAYER_WIDTH - BULLET_WIDTH) / 2
-OBSTACLES_MARGIN_X = 100
-OBSTACLES_MARGIN_Y = 50
-OBSTACLES_BOUNDS_MIN_X = BOUNDS_MIN_X + OBSTACLES_MARGIN_X
-OBSTACLES_BOUNDS_MAX_X = BOUNDS_MAX_X - OBSTACLES_MARGIN_X
-OBSTACLES_BOUNDS_MIN_Y = BOUNDS_MIN_Y + OBSTACLES_MARGIN_Y
-OBSTACLES_BOUNDS_MAX_Y = BOUNDS_MAX_Y - OBSTACLES_MARGIN_Y
+OBSTACLE_MARGIN_X = 100
+OBSTACLE_MARGIN_Y = 50
+OBSTACLE_BOUNDS_MIN_X = BOUNDS_MIN_X + OBSTACLE_MARGIN_X
+OBSTACLE_BOUNDS_MAX_X = BOUNDS_MAX_X - OBSTACLE_MARGIN_X
+OBSTACLE_BOUNDS_MIN_Y = BOUNDS_MIN_Y + OBSTACLE_MARGIN_Y
+OBSTACLE_BOUNDS_MAX_Y = BOUNDS_MAX_Y - OBSTACLE_MARGIN_Y
+
+LEVELS = [
+    [
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y,
+            "left": OBSTACLE_BOUNDS_MIN_X,
+            "rows": OBSTACLE_TYPE_1_ROWS,
+            "columns": OBSTACLE_TYPE_1_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_TYPE_1_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MIN_X,
+            "rows": OBSTACLE_TYPE_1_ROWS,
+            "columns": OBSTACLE_TYPE_1_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y,
+            "left": OBSTACLE_BOUNDS_MAX_X - OBSTACLE_TYPE_1_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_1_ROWS,
+            "columns": OBSTACLE_TYPE_1_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_TYPE_1_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MAX_X - OBSTACLE_TYPE_1_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_1_ROWS,
+            "columns": OBSTACLE_TYPE_1_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y + 0.5 * (OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_BOUNDS_MIN_Y) - 0.5 * OBSTACLE_TYPE_1_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MIN_X + 0.5 * (OBSTACLE_BOUNDS_MAX_X - OBSTACLE_BOUNDS_MIN_X) - 0.5 * OBSTACLE_TYPE_1_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_1_ROWS,
+            "columns": OBSTACLE_TYPE_1_COLUMNS
+        }
+    ],
+    [
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y + 0.5 * (OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_BOUNDS_MIN_Y) - 0.5 * OBSTACLE_TYPE_2_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MIN_X,
+            "rows": OBSTACLE_TYPE_2_ROWS,
+            "columns": OBSTACLE_TYPE_2_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y + 0.5 * (OBSTACLE_BOUNDS_MAX_Y - OBSTACLE_BOUNDS_MIN_Y) - 0.5 * OBSTACLE_TYPE_2_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MAX_X - OBSTACLE_TYPE_2_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_2_ROWS,
+            "columns": OBSTACLE_TYPE_2_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MIN_Y,
+            "left": OBSTACLE_BOUNDS_MIN_X + 0.5 * (OBSTACLE_BOUNDS_MAX_X - OBSTACLE_BOUNDS_MIN_X) - 0.5 * OBSTACLE_TYPE_2_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_2_ROWS,
+            "columns": OBSTACLE_TYPE_2_COLUMNS
+        },
+        {
+            "top": OBSTACLE_BOUNDS_MAX_Y - 0.5 * OBSTACLE_TYPE_2_ROWS * OBSTACLE_HEIGHT,
+            "left": OBSTACLE_BOUNDS_MIN_X + 0.5 * (OBSTACLE_BOUNDS_MAX_X - OBSTACLE_BOUNDS_MIN_X) - 0.5 * OBSTACLE_TYPE_2_COLUMNS * OBSTACLE_WIDTH,
+            "rows": OBSTACLE_TYPE_2_ROWS,
+            "columns": OBSTACLE_TYPE_2_COLUMNS
+        }
+    ]
+]
 
 
 class Player(pygame.sprite.Sprite):
@@ -145,6 +211,8 @@ class Game:
         pygame.init()
         self.display_screen, self.display_rect = self.make_screen()
         self.laser_sound = pygame.mixer.Sound('assets/laser.ogg')
+        self.player_sprite = pygame.image.load("assets/ship.png")
+        self.player_sprite.convert()
         self.game_over = False
         self.game_to_start = True
         self.game_started = False
@@ -172,10 +240,20 @@ class Game:
     def make_obstacles(self):
         obstacle_group = pygame.sprite.Group()
 
-        for row in range(8):
-            for column in range(4):
-                x = OBSTACLES_BOUNDS_MIN_X + column * OBSTACLE_WIDTH
-                y = OBSTACLES_BOUNDS_MIN_Y + row * OBSTACLE_HEIGHT
+        level = LEVELS[randint(0, 1)]
+
+        for obstacle in level:
+            obstacle_group.add(self.make_obstace_group(obstacle["top"], obstacle["left"], obstacle["rows"], obstacle["columns"]))
+
+        return obstacle_group
+
+    def make_obstace_group(self, top, left, rows, columns):
+        obstacle_group = pygame.sprite.Group()
+
+        for row in range(rows):
+            for column in range(columns):
+                x = left + column * OBSTACLE_WIDTH
+                y = top + row * OBSTACLE_HEIGHT
                 obstacle = Obstacle(x, y, COLOR_OBSTACLE)
                 obstacle_group.add(obstacle)
 
@@ -217,7 +295,7 @@ class Game:
     def check_game_to_start_input(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                self.terminate()
+                self.quit()
             elif event.type == pygame.KEYUP:
                 self.game_to_start = False
                 self.game_started = True
